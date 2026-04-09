@@ -3,6 +3,7 @@ BINARY ?= transport
 DEPLOY_DIR ?= /opt/proletarka-transport
 DEPLOY_BIN ?= $(DEPLOY_DIR)/$(BINARY)
 SYSTEMD_SERVICE ?= proletarka-transport
+DEPLOY_BRANCH ?= main
 
 .PHONY: build run test tidy fmt clean deploy
 
@@ -25,6 +26,7 @@ clean:
 	rm -f $(BINARY)
 
 deploy:
+	git pull --ff-only origin $(DEPLOY_BRANCH)
 	GOCACHE=$(GOCACHE) go build -o $(BINARY) ./cmd/transport
 	install -d $(DEPLOY_DIR)
 	install -m 755 $(BINARY) $(DEPLOY_BIN)

@@ -104,17 +104,18 @@ Useful `Makefile` commands:
 ## Production run without Docker
 
 Recommended approach for this service:
-- build the binary outside the server
-- copy the binary to the server
+- keep the repository on the server
 - keep env in a separate file
 - run the service with `systemd`
+- deploy with `git pull` and local build on the server
 
 Example unit file:
 - [deploy/systemd/proletarka-transport.service](/home/tuor4eg/pets/proletarka_transport/deploy/systemd/proletarka-transport.service)
 
-Example deploy layout:
+Example server layout:
 
 ```text
+/srv/proletarka-transport/repo
 /opt/proletarka-transport/transport
 /etc/proletarka-transport.env
 ```
@@ -144,13 +145,14 @@ sudo systemctl start proletarka-transport
 sudo systemctl status proletarka-transport
 ```
 
-After initial setup, you can deploy updated versions on the server with:
+After initial setup, you can deploy updated versions on the server from the repo directory with:
 
 ```bash
 make deploy
 ```
 
 Default `make deploy` behavior:
+- runs `git pull --ff-only origin main`
 - builds `./cmd/transport`
 - installs the binary to `/opt/proletarka-transport/transport`
 - restarts `proletarka-transport`
@@ -159,7 +161,7 @@ Default `make deploy` behavior:
 You can override defaults if needed:
 
 ```bash
-make deploy DEPLOY_DIR=/srv/proletarka-transport SYSTEMD_SERVICE=proletarka-transport
+make deploy DEPLOY_BRANCH=master DEPLOY_DIR=/opt/proletarka-transport SYSTEMD_SERVICE=proletarka-transport
 ```
 
 ## HTTP API
