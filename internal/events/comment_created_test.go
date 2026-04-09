@@ -75,21 +75,19 @@ func TestBuildCommentCreatedMessage(t *testing.T) {
 		AdminURL:          "https://example.com/admin",
 	})
 
-	if message.Subject != "New comment on Release Notes" {
+	if message.Subject != "Новый комментарий: Release Notes" {
 		t.Fatalf("unexpected subject: %q", message.Subject)
 	}
 
 	for _, expected := range []string{
-		"New comment created",
-		"Severity: normal",
-		"Resource: comment/comment_123",
-		"Author: Alice",
-		"Target type: post",
-		"Target title: Release Notes",
-		"Comment:",
+		"Новый комментарий",
+		"Автор: Alice",
+		"Тип: объект",
+		"Материал: Release Notes",
+		"Текст комментария:",
 		"Looks good",
-		"Public: https://example.com/public",
-		"Admin: https://example.com/admin",
+		"Публичная ссылка: https://example.com/public",
+		"Админка: https://example.com/admin",
 	} {
 		if !strings.Contains(message.Text, expected) {
 			t.Fatalf("expected message text to contain %q, got %q", expected, message.Text)

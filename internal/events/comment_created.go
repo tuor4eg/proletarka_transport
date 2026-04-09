@@ -80,37 +80,43 @@ func buildCommentCreatedMessage(event domain.Event, payload commentCreatedPayloa
 	}
 
 	lines := []string{
-		"New comment created",
-		fmt.Sprintf("Severity: %s", event.Severity),
-		fmt.Sprintf("Resource: %s/%s", event.Resource.Kind, event.Resource.ID),
+		"Новый комментарий",
 	}
 
 	if payload.CommentAuthorName != "" {
-		lines = append(lines, fmt.Sprintf("Author: %s", payload.CommentAuthorName))
+		lines = append(lines, fmt.Sprintf("Автор: %s", payload.CommentAuthorName))
 	}
 
 	if payload.TargetType != "" {
-		lines = append(lines, fmt.Sprintf("Target type: %s", payload.TargetType))
+		lines = append(lines, fmt.Sprintf("Тип: %s", humanizeTargetType(payload.TargetType)))
 	}
 
 	if payload.TargetTitle != "" {
-		lines = append(lines, fmt.Sprintf("Target title: %s", payload.TargetTitle))
+		lines = append(lines, fmt.Sprintf("Материал: %s", payload.TargetTitle))
 	}
 
-	lines = append(lines, "", "Comment:", payload.CommentText)
+	lines = append(lines, "", "Текст комментария:", payload.CommentText)
 
 	if payload.PublicURL != "" {
-		lines = append(lines, "", fmt.Sprintf("Public: %s", payload.PublicURL))
+		lines = append(lines, "", fmt.Sprintf("Публичная ссылка: %s", payload.PublicURL))
 	}
 
 	if payload.AdminURL != "" {
-		lines = append(lines, fmt.Sprintf("Admin: %s", payload.AdminURL))
+		lines = append(lines, fmt.Sprintf("Админка: %s", payload.AdminURL))
 	}
 
 	return channels.Message{
-		Subject: fmt.Sprintf("New comment on %s", subjectTarget),
+		Subject: fmt.Sprintf("Новый комментарий: %s", subjectTarget),
 		Text:    strings.Join(lines, "\n"),
 	}
+}
+
+func humanizeTargetType(value string) string {
+	if value == "person" {
+		return "человек"
+	}
+
+	return "объект"
 }
 
 func getMap(value map[string]any, key string) map[string]any {
