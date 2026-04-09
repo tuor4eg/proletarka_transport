@@ -247,6 +247,16 @@ Telegram messages are currently sent as plain text without markup, so user-gener
 If multiple Telegram chat ids are configured, the Telegram channel is treated as successful when delivery succeeds for at least one recipient.
 If multiple email recipients are configured, the Email channel is treated as successful when delivery succeeds for at least one recipient.
 
+## Telegram commands
+
+Current commands:
+- `/ping` replies with `pong`
+
+Command rules:
+- commands are available only for Telegram ids listed in `TELEGRAM_CHAT_IDS`
+- the service checks access before running the command handler
+- if `TELEGRAM_CHAT_IDS` is empty, command handling is disabled
+
 ## Logs
 
 The service writes simple structured logs for:

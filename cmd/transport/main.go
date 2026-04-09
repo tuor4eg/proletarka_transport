@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 
@@ -19,12 +20,14 @@ func main() {
 
 	appLogger := logger.New()
 	var telegramChannel channels.Channel
+	var telegramBot *channels.TelegramChannel
 	if cfg.Telegram.Enabled {
 		channel, err := channels.NewTelegramChannel(cfg.Telegram)
 		if err != nil {
 			log.Fatalf("telegram config error: %v", err)
 		}
 		telegramChannel = channel
+		telegramBot = channel
 	}
 
 	var emailChannel channels.Channel
@@ -37,6 +40,10 @@ func main() {
 	server := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
 		Handler: handler,
+	}
+
+	if telegramBot != nil {
+		telegramBot.StartCommands(context.Background(), appLogger)
 	}
 
 	appLogger.Info("transport service starting", "port", cfg.Server.Port, "telegram_enabled", cfg.Telegram.Enabled, "email_enabled", cfg.Email.Enabled)
