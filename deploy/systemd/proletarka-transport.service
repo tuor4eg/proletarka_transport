@@ -1,0 +1,16 @@
+[Unit]
+Description=proletarka transport service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/proletarka-transport
+EnvironmentFile=/etc/proletarka-transport.env
+ExecStart=/opt/proletarka-transport/transport
+Restart=on-failure
+RestartSec=5
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target
