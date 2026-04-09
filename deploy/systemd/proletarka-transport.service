@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/proletarka-transport
-EnvironmentFile=/etc/proletarka-transport.env
-ExecStart=/opt/proletarka-transport/transport
+WorkingDirectory=/opt/proletarka_transport
+EnvironmentFile=/opt/proletarka_transport/.env
+ExecStart=/opt/proletarka_transport/transport
 Restart=on-failure
 RestartSec=5
 User=www-data

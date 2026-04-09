@@ -1,6 +1,6 @@
 GOCACHE ?= /tmp/go-build
 BINARY ?= transport
-DEPLOY_DIR ?= /opt/proletarka-transport
+DEPLOY_DIR ?= /opt/proletarka_transport
 DEPLOY_BIN ?= $(DEPLOY_DIR)/$(BINARY)
 SYSTEMD_SERVICE ?= proletarka-transport
 DEPLOY_BRANCH ?= main

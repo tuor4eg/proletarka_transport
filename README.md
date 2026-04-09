@@ -116,11 +116,11 @@ Example server layout:
 
 ```text
 /srv/proletarka-transport/repo
-/opt/proletarka-transport/transport
-/etc/proletarka-transport.env
+/opt/proletarka_transport/transport
+/opt/proletarka_transport/.env
 ```
 
-Example env file:
+Example env file at `/opt/proletarka_transport/.env`:
 
 ```bash
 PORT=8080
@@ -154,14 +154,14 @@ make deploy
 Default `make deploy` behavior:
 - runs `git pull --ff-only origin main`
 - builds `./cmd/transport`
-- installs the binary to `/opt/proletarka-transport/transport`
+- installs the binary to `/opt/proletarka_transport/transport`
 - restarts `proletarka-transport`
 - prints service status
 
 You can override defaults if needed:
 
 ```bash
-make deploy DEPLOY_BRANCH=master DEPLOY_DIR=/opt/proletarka-transport SYSTEMD_SERVICE=proletarka-transport
+make deploy DEPLOY_BRANCH=master DEPLOY_DIR=/opt/proletarka_transport SYSTEMD_SERVICE=proletarka-transport
 ```
 
 ## HTTP API
