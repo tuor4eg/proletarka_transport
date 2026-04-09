@@ -68,9 +68,20 @@ func (c *TelegramChannel) Send(ctx context.Context, message Message) error {
 }
 
 func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger) {
+	c.bot.RegisterHandler(bot.HandlerTypeMessageText, "start", bot.MatchTypeCommand, func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		if !c.isAllowed(update) {
+			c.reply(ctx, update.Message.Chat.ID, "Команда недоступна для этого аккаунта.")
+			logger.Warn("telegram command rejected", "command", "start", "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
+			return
+		}
+
+		c.reply(ctx, update.Message.Chat.ID, "Здравствуйте! Я transport-бот Proletarka.\n\nДоступные команды:\n/start — приветствие\n/ping — проверка, что бот на связи")
+		logger.Info("telegram command handled", "command", "start", "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
+	})
+
 	c.bot.RegisterHandler(bot.HandlerTypeMessageText, "ping", bot.MatchTypeCommand, func(ctx context.Context, b *bot.Bot, update *models.Update) {
 		if !c.isAllowed(update) {
-			c.reply(ctx, update.Message.Chat.ID, "command is not available for this account")
+			c.reply(ctx, update.Message.Chat.ID, "Команда недоступна для этого аккаунта.")
 			logger.Warn("telegram command rejected", "command", "ping", "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
 			return
 		}
@@ -85,12 +96,12 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 		}
 
 		if !c.isAllowed(update) {
-			c.reply(ctx, update.Message.Chat.ID, "command is not available for this account")
+			c.reply(ctx, update.Message.Chat.ID, "Команда недоступна для этого аккаунта.")
 			logger.Warn("telegram command rejected", "command", update.Message.Text, "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
 			return
 		}
 
-		c.reply(ctx, update.Message.Chat.ID, "unknown command")
+		c.reply(ctx, update.Message.Chat.ID, "Неизвестная команда. Используйте /start или /ping.")
 		logger.Info("telegram command not found", "command", update.Message.Text, "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
 	})
 
