@@ -23,6 +23,10 @@ func TestLoadEnablesTelegramOnly(t *testing.T) {
 		t.Fatalf("Load() returned error: %v", err)
 	}
 
+	if cfg.Server.BindAddr != "0.0.0.0" {
+		t.Fatalf("expected bind addr 0.0.0.0, got %s", cfg.Server.BindAddr)
+	}
+
 	if cfg.Server.Port != "9090" {
 		t.Fatalf("expected port 9090, got %s", cfg.Server.Port)
 	}
@@ -111,6 +115,7 @@ func TestMain(m *testing.M) {
 func clearEnv() {
 	for _, key := range []string{
 		"PORT",
+		"BIND_ADDR",
 		"INBOUND_EVENTS_SECRET",
 		"TELEGRAM_BOT_TOKEN",
 		"TELEGRAM_CHAT_IDS",

@@ -15,7 +15,8 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port string
+	BindAddr string
+	Port     string
 }
 
 type InboundConfig struct {
@@ -42,7 +43,8 @@ type EmailConfig struct {
 func Load() (Config, error) {
 	cfg := Config{
 		Server: ServerConfig{
-			Port: envOrDefault("PORT", "8080"),
+			BindAddr: envOrDefault("BIND_ADDR", "0.0.0.0"),
+			Port:     envOrDefault("PORT", "8080"),
 		},
 		Inbound: InboundConfig{
 			EventsSecret: os.Getenv("INBOUND_EVENTS_SECRET"),

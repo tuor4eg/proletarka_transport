@@ -38,7 +38,7 @@ func main() {
 	dispatcher := events.NewDispatcher(appLogger, telegramChannel, emailChannel)
 	handler := httptransport.NewEventsHandler(cfg, appLogger, dispatcher)
 	server := &http.Server{
-		Addr:    ":" + cfg.Server.Port,
+		Addr:    cfg.Server.BindAddr + ":" + cfg.Server.Port,
 		Handler: handler,
 	}
 
@@ -46,7 +46,7 @@ func main() {
 		telegramBot.StartCommands(context.Background(), appLogger)
 	}
 
-	appLogger.Info("transport service starting", "port", cfg.Server.Port, "telegram_enabled", cfg.Telegram.Enabled, "email_enabled", cfg.Email.Enabled)
+	appLogger.Info("transport service starting", "bind_addr", cfg.Server.BindAddr, "port", cfg.Server.Port, "telegram_enabled", cfg.Telegram.Enabled, "email_enabled", cfg.Email.Enabled)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)

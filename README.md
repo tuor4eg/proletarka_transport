@@ -32,6 +32,8 @@ Copy [.env.example](/home/tuor4eg/pets/proletarka_transport/.env.example) and se
 
 ### Optional with defaults
 
+- `BIND_ADDR`
+  Default: `0.0.0.0`
 - `PORT`
   Default: `8080`
 
@@ -87,7 +89,7 @@ make build
 Run:
 
 ```bash
-INBOUND_EVENTS_SECRET=change-me PORT=8080 ./transport
+BIND_ADDR=0.0.0.0 INBOUND_EVENTS_SECRET=change-me PORT=8080 ./transport
 ```
 
 For local shell-based runs you can export variables first or use your preferred env loader.
@@ -123,6 +125,7 @@ Example server layout:
 Example env file at `/opt/proletarka_transport/.env`:
 
 ```bash
+BIND_ADDR=0.0.0.0
 PORT=8080
 INBOUND_EVENTS_SECRET=change-me
 TELEGRAM_BOT_TOKEN=
@@ -163,6 +166,15 @@ You can override defaults if needed:
 ```bash
 make deploy DEPLOY_BRANCH=master DEPLOY_DIR=/opt/proletarka_transport SYSTEMD_SERVICE=proletarka-transport
 ```
+
+For a Docker-on-host setup, you can bind the service only to the Docker bridge IP instead of exposing it on all interfaces:
+
+```bash
+BIND_ADDR=172.17.0.1
+PORT=8080
+```
+
+With this setup, containers can use `http://host.docker.internal:8080/events`, while the transport service is not exposed on public interfaces.
 
 ## HTTP API
 
