@@ -15,7 +15,7 @@ type EmailChannel struct {
 	user     string
 	password string
 	from     string
-	to       string
+	to       []string
 }
 
 func NewEmailChannel(cfg config.EmailConfig) *EmailChannel {
@@ -37,12 +37,24 @@ func (c *EmailChannel) Send(_ context.Context, message Message) error {
 	auth := smtp.PlainAuth("", c.user, c.password, c.host)
 	addr := fmt.Sprintf("%s:%d", c.host, c.port)
 
-	body := buildEmailBody(c.from, c.to, message.Subject, message.Text)
-	if err := smtp.SendMail(addr, auth, c.from, []string{c.to}, []byte(body)); err != nil {
-		return fmt.Errorf("send email message: %w", err)
+	var delivered int
+	var failures []string
+
+	for _, recipient := range c.to {
+		body := buildEmailBody(c.from, recipient, message.Subject, message.Text)
+		if err := smtp.SendMail(addr, auth, c.from, []string{recipient}, []byte(body)); err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", recipient, err))
+			continue
+		}
+
+		delivered++
 	}
 
-	return nil
+	if delivered > 0 {
+		return nil
+	}
+
+	return fmt.Errorf("send email message to all recipients failed: %s", strings.Join(failures, "; "))
 }
 
 func buildEmailBody(from string, to string, subject string, text string) string {

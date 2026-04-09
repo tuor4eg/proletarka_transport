@@ -10,7 +10,7 @@ func TestLoadEnablesTelegramOnly(t *testing.T) {
 	t.Setenv("PORT", "9090")
 	t.Setenv("INBOUND_EVENTS_SECRET", "secret")
 	t.Setenv("TELEGRAM_BOT_TOKEN", "token")
-	t.Setenv("TELEGRAM_CHAT_ID", "123")
+	t.Setenv("TELEGRAM_CHAT_IDS", "123,456")
 	t.Setenv("SMTP_HOST", "")
 	t.Setenv("SMTP_PORT", "")
 	t.Setenv("SMTP_USER", "")
@@ -31,6 +31,10 @@ func TestLoadEnablesTelegramOnly(t *testing.T) {
 		t.Fatalf("expected telegram to be enabled")
 	}
 
+	if len(cfg.Telegram.ChatIDs) != 2 {
+		t.Fatalf("expected 2 telegram chat ids, got %d", len(cfg.Telegram.ChatIDs))
+	}
+
 	if cfg.Email.Enabled {
 		t.Fatalf("expected email to be disabled")
 	}
@@ -39,7 +43,7 @@ func TestLoadEnablesTelegramOnly(t *testing.T) {
 func TestLoadFailsWhenAllChannelsDisabled(t *testing.T) {
 	t.Setenv("INBOUND_EVENTS_SECRET", "secret")
 	t.Setenv("TELEGRAM_BOT_TOKEN", "")
-	t.Setenv("TELEGRAM_CHAT_ID", "")
+	t.Setenv("TELEGRAM_CHAT_IDS", "")
 	t.Setenv("SMTP_HOST", "")
 	t.Setenv("SMTP_PORT", "")
 	t.Setenv("SMTP_USER", "")
@@ -60,7 +64,7 @@ func TestLoadFailsWhenAllChannelsDisabled(t *testing.T) {
 func TestLoadFailsForPartialEmailConfig(t *testing.T) {
 	t.Setenv("INBOUND_EVENTS_SECRET", "secret")
 	t.Setenv("TELEGRAM_BOT_TOKEN", "")
-	t.Setenv("TELEGRAM_CHAT_ID", "")
+	t.Setenv("TELEGRAM_CHAT_IDS", "")
 	t.Setenv("SMTP_HOST", "smtp.example.com")
 	t.Setenv("SMTP_PORT", "587")
 	t.Setenv("SMTP_USER", "user")
@@ -78,6 +82,27 @@ func TestLoadFailsForPartialEmailConfig(t *testing.T) {
 	}
 }
 
+func TestLoadParsesMultipleEmailRecipients(t *testing.T) {
+	t.Setenv("INBOUND_EVENTS_SECRET", "secret")
+	t.Setenv("TELEGRAM_BOT_TOKEN", "token")
+	t.Setenv("TELEGRAM_CHAT_IDS", "123")
+	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_PORT", "587")
+	t.Setenv("SMTP_USER", "user")
+	t.Setenv("SMTP_PASSWORD", "password")
+	t.Setenv("EMAIL_FROM", "from@example.com")
+	t.Setenv("EMAIL_TO", "one@example.com, two@example.com")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if len(cfg.Email.To) != 2 {
+		t.Fatalf("expected 2 email recipients, got %d", len(cfg.Email.To))
+	}
+}
+
 func TestMain(m *testing.M) {
 	clearEnv()
 	os.Exit(m.Run())
@@ -88,7 +113,7 @@ func clearEnv() {
 		"PORT",
 		"INBOUND_EVENTS_SECRET",
 		"TELEGRAM_BOT_TOKEN",
-		"TELEGRAM_CHAT_ID",
+		"TELEGRAM_CHAT_IDS",
 		"SMTP_HOST",
 		"SMTP_PORT",
 		"SMTP_USER",

@@ -40,7 +40,13 @@ Copy [.env.example](/home/tuor4eg/pets/proletarka_transport/.env.example) and se
 Telegram is enabled only when both variables are set:
 
 - `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
+- `TELEGRAM_CHAT_IDS`
+
+`TELEGRAM_CHAT_IDS` is a comma-separated list with one or more Telegram chat ids, for example:
+
+```text
+TELEGRAM_CHAT_IDS=12345,67890,99999
+```
 
 ### Email channel
 
@@ -52,6 +58,12 @@ Email is enabled only when all variables are set:
 - `SMTP_PASSWORD`
 - `EMAIL_FROM`
 - `EMAIL_TO`
+
+`EMAIL_TO` is a comma-separated list with one or more email recipients, for example:
+
+```text
+EMAIL_TO=admin1@example.com,admin2@example.com
+```
 
 The service will not start if:
 - `INBOUND_EVENTS_SECRET` is missing
@@ -113,7 +125,7 @@ Example env file:
 PORT=8080
 INBOUND_EVENTS_SECRET=change-me
 TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
+TELEGRAM_CHAT_IDS=
 SMTP_HOST=
 SMTP_PORT=
 SMTP_USER=
@@ -230,6 +242,8 @@ For `comment.created`:
 4. If both fail, the service returns an error and writes readable logs.
 
 Telegram messages are currently sent as plain text without markup, so user-generated content is delivered safely without HTML parsing issues.
+If multiple Telegram chat ids are configured, the Telegram channel is treated as successful when delivery succeeds for at least one recipient.
+If multiple email recipients are configured, the Email channel is treated as successful when delivery succeeds for at least one recipient.
 
 ## Logs
 

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"strconv"
 )
 
@@ -23,7 +24,7 @@ type InboundConfig struct {
 
 type TelegramConfig struct {
 	BotToken string
-	ChatID   string
+	ChatIDs  []string
 	Enabled  bool
 }
 
@@ -34,7 +35,7 @@ type EmailConfig struct {
 	User     string
 	Password string
 	From     string
-	To       string
+	To       []string
 	Enabled  bool
 }
 
@@ -48,7 +49,7 @@ func Load() (Config, error) {
 		},
 		Telegram: TelegramConfig{
 			BotToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
-			ChatID:   os.Getenv("TELEGRAM_CHAT_ID"),
+			ChatIDs:  parseCommaSeparatedEnv("TELEGRAM_CHAT_IDS"),
 		},
 		Email: EmailConfig{
 			Host:     os.Getenv("SMTP_HOST"),
@@ -56,7 +57,7 @@ func Load() (Config, error) {
 			User:     os.Getenv("SMTP_USER"),
 			Password: os.Getenv("SMTP_PASSWORD"),
 			From:     os.Getenv("EMAIL_FROM"),
-			To:       os.Getenv("EMAIL_TO"),
+			To:       parseCommaSeparatedEnv("EMAIL_TO"),
 		},
 	}
 
@@ -81,15 +82,15 @@ func Load() (Config, error) {
 
 func validateTelegram(cfg *TelegramConfig) error {
 	hasToken := cfg.BotToken != ""
-	hasChatID := cfg.ChatID != ""
+	hasChatIDs := len(cfg.ChatIDs) > 0
 
-	if !hasToken && !hasChatID {
+	if !hasToken && !hasChatIDs {
 		cfg.Enabled = false
 		return nil
 	}
 
-	if !hasToken || !hasChatID {
-		return fmt.Errorf("telegram config must include both TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID")
+	if !hasToken || !hasChatIDs {
+		return fmt.Errorf("telegram config must include both TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_IDS")
 	}
 
 	cfg.Enabled = true
@@ -103,7 +104,7 @@ func validateEmail(cfg *EmailConfig) error {
 		"SMTP_USER":     cfg.User,
 		"SMTP_PASSWORD": cfg.Password,
 		"EMAIL_FROM":    cfg.From,
-		"EMAIL_TO":      cfg.To,
+		"EMAIL_TO":      strings.Join(cfg.To, ","),
 	}
 
 	filled := 0
@@ -139,4 +140,26 @@ func envOrDefault(name string, fallback string) string {
 	}
 
 	return value
+}
+
+func parseCommaSeparatedEnv(name string) []string {
+	raw := os.Getenv(name)
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+
+	return result
 }

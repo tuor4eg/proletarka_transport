@@ -3,6 +3,7 @@ package channels
 import (
 	"context"
 	"fmt"
+	"strings"
 	"strconv"
 
 	"github.com/go-telegram/bot"
@@ -11,14 +12,18 @@ import (
 )
 
 type TelegramChannel struct {
-	bot    *bot.Bot
-	chatID int64
+	bot     *bot.Bot
+	chatIDs []int64
 }
 
 func NewTelegramChannel(cfg config.TelegramConfig) (*TelegramChannel, error) {
-	chatID, err := strconv.ParseInt(cfg.ChatID, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("invalid TELEGRAM_CHAT_ID: %w", err)
+	chatIDs := make([]int64, 0, len(cfg.ChatIDs))
+	for _, rawChatID := range cfg.ChatIDs {
+		chatID, err := strconv.ParseInt(rawChatID, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid TELEGRAM_CHAT_IDS value %q: %w", rawChatID, err)
+		}
+		chatIDs = append(chatIDs, chatID)
 	}
 
 	client, err := bot.New(cfg.BotToken)
@@ -27,8 +32,8 @@ func NewTelegramChannel(cfg config.TelegramConfig) (*TelegramChannel, error) {
 	}
 
 	return &TelegramChannel{
-		bot:    client,
-		chatID: chatID,
+		bot:     client,
+		chatIDs: chatIDs,
 	}, nil
 }
 
@@ -37,13 +42,25 @@ func (c *TelegramChannel) Name() string {
 }
 
 func (c *TelegramChannel) Send(ctx context.Context, message Message) error {
-	_, err := c.bot.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: c.chatID,
-		Text:   message.Text,
-	})
-	if err != nil {
-		return fmt.Errorf("send telegram message: %w", err)
+	var delivered int
+	var failures []string
+
+	for _, chatID := range c.chatIDs {
+		_, err := c.bot.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: chatID,
+			Text:   message.Text,
+		})
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%d: %v", chatID, err))
+			continue
+		}
+
+		delivered++
 	}
 
-	return nil
+	if delivered > 0 {
+		return nil
+	}
+
+	return fmt.Errorf("send telegram message to all chats failed: %s", strings.Join(failures, "; "))
 }
