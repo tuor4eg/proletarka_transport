@@ -57,6 +57,27 @@ func TestAddPersonReturnsPlaceholder(t *testing.T) {
 	}
 }
 
+func TestAddPersonUsesConfiguredHandler(t *testing.T) {
+	menu := NewWithOptions(Options{
+		AddPersonHandler: func(ctx context.Context) (string, error) {
+			return "Темы загружены", nil
+		},
+	})
+
+	item, ok := menu.FindCallback(CallbackKey("add_person"))
+	if !ok {
+		t.Fatal("add_person callback not found")
+	}
+
+	got, err := Run(context.Background(), item)
+	if err != nil {
+		t.Fatalf("run add_person: %v", err)
+	}
+	if got != "Темы загружены" {
+		t.Fatalf("add_person result = %q, want %q", got, "Темы загружены")
+	}
+}
+
 func TestFindCallbackAction(t *testing.T) {
 	menu := NewWithStartedAt(time.Now().Add(-2*time.Hour - 3*time.Minute - 4*time.Second))
 

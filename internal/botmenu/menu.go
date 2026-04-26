@@ -10,6 +10,11 @@ import (
 const CallbackPrefix = "menu:"
 
 type Action func(ctx context.Context) (string, error)
+type AddPersonAction func(ctx context.Context) (string, error)
+
+type Options struct {
+	AddPersonHandler AddPersonAction
+}
 
 type Item struct {
 	ID       string
@@ -31,22 +36,35 @@ func New() *Menu {
 	return NewWithStartedAt(time.Now())
 }
 
+func NewWithOptions(options Options) *Menu {
+	return newWithStartedAtAndOptions(time.Now(), options)
+}
+
 func NewWithStartedAt(startedAt time.Time) *Menu {
+	return newWithStartedAtAndOptions(startedAt, Options{})
+}
+
+func newWithStartedAtAndOptions(startedAt time.Time, options Options) *Menu {
 	if startedAt.IsZero() {
 		startedAt = time.Now()
 	}
 
 	menu := &Menu{startedAt: startedAt}
+	addPersonAction := AddPersonAction(func(ctx context.Context) (string, error) {
+		return addPersonPlaceholderMessage(), nil
+	})
+	if options.AddPersonHandler != nil {
+		addPersonAction = options.AddPersonHandler
+	}
+
 	menu.root = &Item{
 		ID:    "root",
 		Title: "Меню",
 		Children: []*Item{
 			{
-				ID:    "add_person",
-				Title: "Добавить человека",
-				Action: func(ctx context.Context) (string, error) {
-					return addPersonPlaceholderMessage(), nil
-				},
+				ID:     "add_person",
+				Title:  "Добавить человека",
+				Action: Action(addPersonAction),
 			},
 			{
 				ID:    "ping",

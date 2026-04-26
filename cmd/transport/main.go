@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"proletarka_transport/internal/backend"
 	"proletarka_transport/internal/channels"
 	"proletarka_transport/internal/config"
 	"proletarka_transport/internal/events"
@@ -19,10 +20,19 @@ func main() {
 	}
 
 	appLogger := logger.New()
+	var importTopicsProvider channels.ImportTopicsProvider
+	if cfg.API.Enabled {
+		client, err := backend.NewClient(cfg.API, nil)
+		if err != nil {
+			log.Fatalf("api config error: %v", err)
+		}
+		importTopicsProvider = client
+	}
+
 	var telegramChannel channels.Channel
 	var telegramBot *channels.TelegramChannel
 	if cfg.Telegram.Enabled {
-		channel, err := channels.NewTelegramChannel(cfg.Telegram)
+		channel, err := channels.NewTelegramChannel(cfg.Telegram, importTopicsProvider)
 		if err != nil {
 			log.Fatalf("telegram config error: %v", err)
 		}

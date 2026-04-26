@@ -34,32 +34,3 @@ deploy:
 	chmod 755 $(DEPLOY_BIN)
 	systemctl restart $(SYSTEMD_SERVICE)
 	systemctl status $(SYSTEMD_SERVICE) --no-pager
-
-sync-env:
-	@test -f "$(ENV_EXAMPLE)" || (echo "$(ENV_EXAMPLE) not found" && exit 1)
-	@touch "$(ENV_FILE)"
-	@awk -F= '\
-		FNR == NR {\
-			if ($$0 ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/) {\
-				key = $$1;\
-				gsub(/^[[:space:]]+|[[:space:]]+$$/, "", key);\
-				existing[key] = 1;\
-			}\
-			next;\
-		}\
-		$$0 ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=/ {\
-			key = $$1;\
-			gsub(/^[[:space:]]+|[[:space:]]+$$/, "", key);\
-			if (!(key in existing)) {\
-				print key "=";\
-				added += 1;\
-			}\
-		}\
-		END {\
-			if (added > 0) {\
-				printf("Added %d missing env variable(s) to $(ENV_FILE)\n", added) > "/dev/stderr";\
-			} else {\
-				printf("$(ENV_FILE) already has all variables from $(ENV_EXAMPLE)\n") > "/dev/stderr";\
-			}\
-		}\
-	' "$(ENV_FILE)" "$(ENV_EXAMPLE)" >> "$(ENV_FILE)"

@@ -10,9 +10,16 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"proletarka_transport/internal/backend"
 	"proletarka_transport/internal/botmenu"
 	"proletarka_transport/internal/config"
 )
+
+const importTopicsUnavailableMessage = "Не удалось получить список тем. Попробуйте позже."
+
+type ImportTopicsProvider interface {
+	FetchImportTopics(ctx context.Context) ([]backend.ImportTopic, error)
+}
 
 type TelegramChannel struct {
 	bot     *bot.Bot
@@ -20,7 +27,7 @@ type TelegramChannel struct {
 	menu    *botmenu.Menu
 }
 
-func NewTelegramChannel(cfg config.TelegramConfig) (*TelegramChannel, error) {
+func NewTelegramChannel(cfg config.TelegramConfig, importTopicsProvider ImportTopicsProvider) (*TelegramChannel, error) {
 	chatIDs := make([]int64, 0, len(cfg.ChatIDs))
 	for _, rawChatID := range cfg.ChatIDs {
 		chatID, err := strconv.ParseInt(rawChatID, 10, 64)
@@ -38,8 +45,25 @@ func NewTelegramChannel(cfg config.TelegramConfig) (*TelegramChannel, error) {
 	return &TelegramChannel{
 		bot:     client,
 		chatIDs: chatIDs,
-		menu:    botmenu.New(),
+		menu: botmenu.NewWithOptions(botmenu.Options{
+			AddPersonHandler: addPersonHandler(importTopicsProvider),
+		}),
 	}, nil
+}
+
+func addPersonHandler(provider ImportTopicsProvider) botmenu.AddPersonAction {
+	return func(ctx context.Context) (string, error) {
+		if provider == nil {
+			return "API основного backend не настроен. Список тем сейчас недоступен.", nil
+		}
+
+		topics, err := provider.FetchImportTopics(ctx)
+		if err != nil {
+			return importTopicsUnavailableMessage, nil
+		}
+
+		return backend.FormatImportTopics(topics), nil
+	}
 }
 
 func (c *TelegramChannel) Name() string {
