@@ -126,7 +126,7 @@ func TestHandlePendingPersonTextGeneratesDraftAndClearsState(t *testing.T) {
 	}
 	channel.setPendingAction(123, waitingPersonText)
 
-	got := channel.handlePendingPersonText(context.Background(), 123, " Иван Иванов, в 1942 работал на заводе. ")
+	got := channel.handlePendingPersonText(context.Background(), 123, " Иван Иванов, в 1942 работал на заводе. ", nil)
 
 	if !strings.Contains(got, "Черновик для проверки") {
 		t.Fatalf("result = %q, want draft title", got)
@@ -163,7 +163,7 @@ func TestHandlePendingPersonTextRejectsInvalidAIJSON(t *testing.T) {
 	}
 	channel.setPendingAction(123, waitingPersonText)
 
-	got := channel.handlePendingPersonText(context.Background(), 123, "Иван Иванов")
+	got := channel.handlePendingPersonText(context.Background(), 123, "Иван Иванов", nil)
 
 	if got != personDraftUnavailableMessage {
 		t.Fatalf("result = %q, want %q", got, personDraftUnavailableMessage)
@@ -177,7 +177,7 @@ func TestHandlePendingPersonTextAsksAgainForEmptyInput(t *testing.T) {
 	channel := &TelegramChannel{}
 	channel.setPendingAction(123, waitingPersonText)
 
-	got := channel.handlePendingPersonText(context.Background(), 123, "   ")
+	got := channel.handlePendingPersonText(context.Background(), 123, "   ", nil)
 
 	if got != addPersonPromptMessage {
 		t.Fatalf("result = %q, want prompt message", got)
@@ -195,7 +195,7 @@ func TestHandlePendingPersonTextClearsStateWhenAINotConfigured(t *testing.T) {
 	}
 	channel.setPendingAction(123, waitingPersonText)
 
-	got := channel.handlePendingPersonText(context.Background(), 123, "Иван Иванов")
+	got := channel.handlePendingPersonText(context.Background(), 123, "Иван Иванов", nil)
 
 	if !strings.Contains(got, "AI-разбор не настроен") {
 		t.Fatalf("result = %q, want AI disabled explanation", got)

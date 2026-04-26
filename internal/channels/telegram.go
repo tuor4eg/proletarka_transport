@@ -90,7 +90,7 @@ func (c *TelegramChannel) startAddPerson(chatID int64) string {
 	return addPersonPromptMessage
 }
 
-func (c *TelegramChannel) handlePendingPersonText(ctx context.Context, chatID int64, source string) string {
+func (c *TelegramChannel) handlePendingPersonText(ctx context.Context, chatID int64, source string, logger *slog.Logger) string {
 	source = strings.TrimSpace(source)
 	if source == "" {
 		return addPersonPromptMessage
@@ -107,11 +107,13 @@ func (c *TelegramChannel) handlePendingPersonText(ctx context.Context, chatID in
 
 	topics, err := c.importTopicsProvider.FetchImportTopics(ctx)
 	if err != nil {
+		logTelegramWarn(logger, "import topics fetch failed", chatID, err)
 		return importTopicsUnavailableMessage
 	}
 
 	topicsJSON, err := json.Marshal(topics)
 	if err != nil {
+		logTelegramWarn(logger, "import topics marshal failed", chatID, err)
 		return personDraftUnavailableMessage
 	}
 
@@ -120,15 +122,25 @@ func (c *TelegramChannel) handlePendingPersonText(ctx context.Context, chatID in
 		Input: ai.BuildPersonDraftInput(topicsJSON, source),
 	})
 	if err != nil {
+		logTelegramWarn(logger, "person draft generation failed", chatID, err)
 		return personDraftUnavailableMessage
 	}
 
 	draft, err := ai.ParsePersonDraft(response.Text)
 	if err != nil {
+		logTelegramWarn(logger, "person draft parse failed", chatID, err)
 		return personDraftUnavailableMessage
 	}
 
 	return ai.FormatPersonDraft(draft, importTopicTitles(topics))
+}
+
+func logTelegramWarn(logger *slog.Logger, message string, chatID int64, err error) {
+	if logger == nil || err == nil {
+		return
+	}
+
+	logger.Warn(message, "chat_id", chatID, "error", err.Error())
 }
 
 func importTopicTitles(topics []backend.ImportTopic) map[string]string {
@@ -281,7 +293,7 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 			if text != "" {
 				c.reply(ctx, update.Message.Chat.ID, personDraftAcceptedMessage)
 			}
-			result := c.handlePendingPersonText(ctx, update.Message.Chat.ID, text)
+			result := c.handlePendingPersonText(ctx, update.Message.Chat.ID, text, logger)
 			c.replyWithRootMenu(ctx, update.Message.Chat.ID, result)
 			logger.Info("telegram pending person text handled", "user_id", userID, "chat_id", update.Message.Chat.ID)
 			return
