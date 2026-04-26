@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-telegram/bot/models"
 
+	"proletarka_transport/internal/ai"
 	"proletarka_transport/internal/backend"
 )
 
@@ -98,6 +99,89 @@ func TestAddPersonHandlerHidesProviderError(t *testing.T) {
 	}
 }
 
+func TestStartAddPersonSetsPendingState(t *testing.T) {
+	channel := &TelegramChannel{}
+
+	got := channel.startAddPerson(123)
+
+	if got != addPersonPromptMessage {
+		t.Fatalf("startAddPerson() = %q, want prompt message", got)
+	}
+	if channel.pendingAction(123) != waitingPersonText {
+		t.Fatalf("pending action = %q, want %q", channel.pendingAction(123), waitingPersonText)
+	}
+}
+
+func TestHandlePendingPersonTextGeneratesDraftAndClearsState(t *testing.T) {
+	generator := &fakePersonDraftGenerator{
+		response: ai.Response{Text: `{"person":{"name":"Иван Иванов"}}`},
+	}
+	channel := &TelegramChannel{
+		importTopicsProvider: fakeImportTopicsProvider{
+			topics: []backend.ImportTopic{
+				{Code: "war", Title: "Война"},
+			},
+		},
+		personDraftGenerator: generator,
+	}
+	channel.setPendingAction(123, waitingPersonText)
+
+	got := channel.handlePendingPersonText(context.Background(), 123, " Иван Иванов, в 1942 работал на заводе. ")
+
+	if !strings.Contains(got, "Черновик от нейронки:\n\n") {
+		t.Fatalf("result = %q, want AI draft prefix", got)
+	}
+	if !strings.Contains(got, `"name":"Иван Иванов"`) {
+		t.Fatalf("result = %q, want AI response", got)
+	}
+	if generator.request.Task != ai.TaskPersonDraft {
+		t.Fatalf("task = %q, want %q", generator.request.Task, ai.TaskPersonDraft)
+	}
+	if generator.request.ModelID != "" {
+		t.Fatalf("model id = %q, want default empty model", generator.request.ModelID)
+	}
+	for _, want := range []string{"\"code\":\"war\"", "source_text:", "Иван Иванов, в 1942 работал на заводе."} {
+		if !strings.Contains(generator.request.Input, want) {
+			t.Fatalf("AI input does not contain %q: %q", want, generator.request.Input)
+		}
+	}
+	if channel.pendingAction(123) != "" {
+		t.Fatalf("pending action was not cleared: %q", channel.pendingAction(123))
+	}
+}
+
+func TestHandlePendingPersonTextAsksAgainForEmptyInput(t *testing.T) {
+	channel := &TelegramChannel{}
+	channel.setPendingAction(123, waitingPersonText)
+
+	got := channel.handlePendingPersonText(context.Background(), 123, "   ")
+
+	if got != addPersonPromptMessage {
+		t.Fatalf("result = %q, want prompt message", got)
+	}
+	if channel.pendingAction(123) != waitingPersonText {
+		t.Fatalf("pending action = %q, want to keep waiting state", channel.pendingAction(123))
+	}
+}
+
+func TestHandlePendingPersonTextClearsStateWhenAINotConfigured(t *testing.T) {
+	channel := &TelegramChannel{
+		importTopicsProvider: fakeImportTopicsProvider{
+			topics: []backend.ImportTopic{{Code: "war", Title: "Война"}},
+		},
+	}
+	channel.setPendingAction(123, waitingPersonText)
+
+	got := channel.handlePendingPersonText(context.Background(), 123, "Иван Иванов")
+
+	if !strings.Contains(got, "AI-разбор не настроен") {
+		t.Fatalf("result = %q, want AI disabled explanation", got)
+	}
+	if channel.pendingAction(123) != "" {
+		t.Fatalf("pending action was not cleared: %q", channel.pendingAction(123))
+	}
+}
+
 func messageUpdate(text string) *models.Update {
 	return &models.Update{
 		Message: &models.Message{
@@ -113,4 +197,15 @@ type fakeImportTopicsProvider struct {
 
 func (p fakeImportTopicsProvider) FetchImportTopics(ctx context.Context) ([]backend.ImportTopic, error) {
 	return p.topics, p.err
+}
+
+type fakePersonDraftGenerator struct {
+	request  ai.Request
+	response ai.Response
+	err      error
+}
+
+func (g *fakePersonDraftGenerator) Generate(ctx context.Context, req ai.Request) (ai.Response, error) {
+	g.request = req
+	return g.response, g.err
 }

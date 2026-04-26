@@ -17,15 +17,23 @@ var (
 
 type Task string
 
-const TaskGeneralDraft Task = "general_draft"
+const (
+	TaskGeneralDraft Task = "general_draft"
+	TaskPersonDraft  Task = "person_draft"
+)
 
 type Message struct {
 	Role    string
 	Content string
 }
 
+type ResponseFormat struct {
+	Type string `json:"type"`
+}
+
 type Prompt struct {
-	Messages []Message
+	Messages       []Message
+	ResponseFormat *ResponseFormat
 }
 
 type Request struct {

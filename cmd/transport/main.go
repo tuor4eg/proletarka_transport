@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"proletarka_transport/internal/ai"
 	"proletarka_transport/internal/backend"
 	"proletarka_transport/internal/channels"
 	"proletarka_transport/internal/config"
@@ -29,10 +30,32 @@ func main() {
 		importTopicsProvider = client
 	}
 
+	var personDraftGenerator channels.PersonDraftGenerator
+	if cfg.AI.Enabled {
+		models := make([]ai.ModelConfig, 0, len(cfg.AI.Models))
+		for _, model := range cfg.AI.Models {
+			models = append(models, ai.ModelConfig{
+				ID:            model.ID,
+				Provider:      model.Provider,
+				Name:          model.Name,
+				APIKey:        model.APIKey,
+				BaseURL:       model.BaseURL,
+				Timeout:       model.Timeout,
+				MaxInputChars: model.MaxInputChars,
+			})
+		}
+		personDraftGenerator = ai.NewService(
+			cfg.AI.Enabled,
+			ai.NewRouter(cfg.AI.Enabled, cfg.AI.DefaultModel, models),
+			ai.NewTemplatePrompter(ai.DefaultPromptTemplates()),
+			ai.NewHTTPTransport(nil),
+		)
+	}
+
 	var telegramChannel channels.Channel
 	var telegramBot *channels.TelegramChannel
 	if cfg.Telegram.Enabled {
-		channel, err := channels.NewTelegramChannel(cfg.Telegram, importTopicsProvider)
+		channel, err := channels.NewTelegramChannel(cfg.Telegram, importTopicsProvider, personDraftGenerator)
 		if err != nil {
 			log.Fatalf("telegram config error: %v", err)
 		}

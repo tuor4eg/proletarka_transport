@@ -33,8 +33,9 @@ func (t *HTTPTransport) Complete(ctx context.Context, model ModelConfig, prompt 
 	}
 
 	body, err := json.Marshal(chatCompletionRequest{
-		Model:    model.Name,
-		Messages: prompt.Messages,
+		Model:          model.Name,
+		Messages:       prompt.Messages,
+		ResponseFormat: prompt.ResponseFormat,
 	})
 	if err != nil {
 		return Response{}, fmt.Errorf("encode ai request: %w", err)
@@ -89,8 +90,9 @@ func chatCompletionsURL(model ModelConfig) (string, error) {
 }
 
 type chatCompletionRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
+	Model          string          `json:"model"`
+	Messages       []Message       `json:"messages"`
+	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
 }
 
 type chatCompletionResponse struct {

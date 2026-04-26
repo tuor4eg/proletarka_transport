@@ -2,7 +2,9 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -112,6 +114,48 @@ func TestTemplatePrompterUsesConfiguredTemplate(t *testing.T) {
 	}
 	if prompt.Messages[1].Content != "user text" {
 		t.Fatalf("expected trimmed user text, got %q", prompt.Messages[1].Content)
+	}
+	if prompt.ResponseFormat != nil {
+		t.Fatalf("expected no response format, got %#v", prompt.ResponseFormat)
+	}
+}
+
+func TestTemplatePrompterBuildsPersonDraftPrompt(t *testing.T) {
+	prompt, err := NewTemplatePrompter(DefaultPromptTemplates()).Build(TaskPersonDraft, "source")
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+	if prompt.ResponseFormat == nil {
+		t.Fatal("expected person draft response format")
+	}
+	if prompt.ResponseFormat.Type != "json_object" {
+		t.Fatalf("expected response format json_object, got %q", prompt.ResponseFormat.Type)
+	}
+
+	system := prompt.Messages[0].Content
+	for _, want := range []string{
+		"Верни только JSON формата",
+		"topicCodes",
+		"Не выдумывай факты",
+		"parent topic codes",
+		"Не дублируй одну и ту же информацию",
+	} {
+		if !strings.Contains(system, want) {
+			t.Fatalf("person draft system prompt does not contain %q: %q", want, system)
+		}
+	}
+}
+
+func TestBuildPersonDraftInput(t *testing.T) {
+	got := BuildPersonDraftInput(json.RawMessage(`[{"code":"war","title":"Война"}]`), " Иван Иванов. В 1942 работал на заводе. ")
+
+	for _, want := range []string{
+		"topics:\n[{\"code\":\"war\",\"title\":\"Война\"}]",
+		"source_text:\nИван Иванов. В 1942 работал на заводе.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("person draft input does not contain %q: %q", want, got)
+		}
 	}
 }
 

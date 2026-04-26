@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,8 +23,19 @@ func TestHTTPTransportCompleteSendsChatCompletionRequest(t *testing.T) {
 			t.Fatalf("unexpected auth header: %s", r.Header.Get("Authorization"))
 		}
 
-		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request: %v", err)
+		}
+		if err := json.Unmarshal(body, &received); err != nil {
 			t.Fatalf("decode request: %v", err)
+		}
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(body, &raw); err != nil {
+			t.Fatalf("decode raw request: %v", err)
+		}
+		if _, ok := raw["response_format"]; ok {
+			t.Fatalf("response_format must be omitted when prompt has none: %s", string(body))
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -51,6 +63,41 @@ func TestHTTPTransportCompleteSendsChatCompletionRequest(t *testing.T) {
 	}
 	if resp.Text != "ok" {
 		t.Fatalf("expected response text ok, got %q", resp.Text)
+	}
+}
+
+func TestHTTPTransportCompleteSendsResponseFormat(t *testing.T) {
+	var received chatCompletionRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+	}))
+	defer server.Close()
+
+	transport := NewHTTPTransport(server.Client())
+	_, err := transport.Complete(context.Background(), ModelConfig{
+		ID:       "main",
+		Provider: "openai",
+		Name:     "gpt-4.1-mini",
+		APIKey:   "secret",
+		BaseURL:  server.URL,
+	}, Prompt{
+		Messages:       []Message{{Role: "user", Content: "text"}},
+		ResponseFormat: &ResponseFormat{Type: "json_object"},
+	})
+	if err != nil {
+		t.Fatalf("Complete() returned error: %v", err)
+	}
+
+	if received.ResponseFormat == nil {
+		t.Fatal("expected response_format in request")
+	}
+	if received.ResponseFormat.Type != "json_object" {
+		t.Fatalf("expected response_format json_object, got %q", received.ResponseFormat.Type)
 	}
 }
 

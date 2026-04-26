@@ -2,32 +2,49 @@ package channels
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"proletarka_transport/internal/ai"
 	"proletarka_transport/internal/backend"
 	"proletarka_transport/internal/botmenu"
 	"proletarka_transport/internal/config"
 )
 
 const importTopicsUnavailableMessage = "Не удалось получить список тем. Попробуйте позже."
+const addPersonPromptMessage = "Пришлите одним сообщением описание человека: имя, годы жизни, биографию, связь с заводом и важные события. Я подготовлю черновик для проверки."
+const personDraftUnavailableMessage = "Не удалось подготовить черновик. Попробуйте позже."
 
 type ImportTopicsProvider interface {
 	FetchImportTopics(ctx context.Context) ([]backend.ImportTopic, error)
 }
 
-type TelegramChannel struct {
-	bot     *bot.Bot
-	chatIDs []int64
-	menu    *botmenu.Menu
+type PersonDraftGenerator interface {
+	Generate(ctx context.Context, req ai.Request) (ai.Response, error)
 }
 
-func NewTelegramChannel(cfg config.TelegramConfig, importTopicsProvider ImportTopicsProvider) (*TelegramChannel, error) {
+type pendingAction string
+
+const waitingPersonText pendingAction = "waiting_person_text"
+
+type TelegramChannel struct {
+	bot                  *bot.Bot
+	chatIDs              []int64
+	menu                 *botmenu.Menu
+	importTopicsProvider ImportTopicsProvider
+	personDraftGenerator PersonDraftGenerator
+	pendingMu            sync.Mutex
+	pending              map[int64]pendingAction
+}
+
+func NewTelegramChannel(cfg config.TelegramConfig, importTopicsProvider ImportTopicsProvider, personDraftGenerator PersonDraftGenerator) (*TelegramChannel, error) {
 	chatIDs := make([]int64, 0, len(cfg.ChatIDs))
 	for _, rawChatID := range cfg.ChatIDs {
 		chatID, err := strconv.ParseInt(rawChatID, 10, 64)
@@ -43,11 +60,12 @@ func NewTelegramChannel(cfg config.TelegramConfig, importTopicsProvider ImportTo
 	}
 
 	return &TelegramChannel{
-		bot:     client,
-		chatIDs: chatIDs,
-		menu: botmenu.NewWithOptions(botmenu.Options{
-			AddPersonHandler: addPersonHandler(importTopicsProvider),
-		}),
+		bot:                  client,
+		chatIDs:              chatIDs,
+		menu:                 botmenu.New(),
+		importTopicsProvider: importTopicsProvider,
+		personDraftGenerator: personDraftGenerator,
+		pending:              make(map[int64]pendingAction),
 	}, nil
 }
 
@@ -64,6 +82,83 @@ func addPersonHandler(provider ImportTopicsProvider) botmenu.AddPersonAction {
 
 		return backend.FormatImportTopics(topics), nil
 	}
+}
+
+func (c *TelegramChannel) startAddPerson(chatID int64) string {
+	c.setPendingAction(chatID, waitingPersonText)
+	return addPersonPromptMessage
+}
+
+func (c *TelegramChannel) handlePendingPersonText(ctx context.Context, chatID int64, source string) string {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return addPersonPromptMessage
+	}
+
+	defer c.clearPendingAction(chatID)
+
+	if c.importTopicsProvider == nil {
+		return "API основного backend не настроен. Список тем сейчас недоступен."
+	}
+	if c.personDraftGenerator == nil {
+		return "AI-разбор не настроен. Черновик сейчас нельзя подготовить."
+	}
+
+	topics, err := c.importTopicsProvider.FetchImportTopics(ctx)
+	if err != nil {
+		return importTopicsUnavailableMessage
+	}
+
+	topicsJSON, err := json.Marshal(topics)
+	if err != nil {
+		return personDraftUnavailableMessage
+	}
+
+	response, err := c.personDraftGenerator.Generate(ctx, ai.Request{
+		Task:  ai.TaskPersonDraft,
+		Input: ai.BuildPersonDraftInput(topicsJSON, source),
+	})
+	if err != nil {
+		return personDraftUnavailableMessage
+	}
+
+	return "Черновик от нейронки:\n\n" + strings.TrimSpace(response.Text)
+}
+
+func (c *TelegramChannel) setPendingAction(chatID int64, action pendingAction) {
+	if c == nil || chatID == 0 {
+		return
+	}
+
+	c.pendingMu.Lock()
+	defer c.pendingMu.Unlock()
+
+	if c.pending == nil {
+		c.pending = make(map[int64]pendingAction)
+	}
+	c.pending[chatID] = action
+}
+
+func (c *TelegramChannel) pendingAction(chatID int64) pendingAction {
+	if c == nil || chatID == 0 {
+		return ""
+	}
+
+	c.pendingMu.Lock()
+	defer c.pendingMu.Unlock()
+
+	return c.pending[chatID]
+}
+
+func (c *TelegramChannel) clearPendingAction(chatID int64) {
+	if c == nil || chatID == 0 {
+		return
+	}
+
+	c.pendingMu.Lock()
+	defer c.pendingMu.Unlock()
+
+	delete(c.pending, chatID)
 }
 
 func (c *TelegramChannel) Name() string {
@@ -103,6 +198,7 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 			return
 		}
 
+		c.clearPendingAction(update.Message.Chat.ID)
 		c.sendRootMenu(ctx, update.Message.Chat.ID)
 		logger.Info("telegram command handled", "command", "start", "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
 	})
@@ -114,6 +210,7 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 			return
 		}
 
+		c.clearPendingAction(update.Message.Chat.ID)
 		c.runMenuAction(ctx, update.Message.Chat.ID, "ping")
 		logger.Info("telegram command handled", "command", "ping", "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
 	})
@@ -151,6 +248,13 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 		if !c.isAllowedMessage(update) {
 			c.reply(ctx, update.Message.Chat.ID, "Действие недоступно для этого аккаунта.")
 			logger.Warn("telegram message rejected", "text", text, "user_id", userID, "chat_id", update.Message.Chat.ID)
+			return
+		}
+
+		if c.pendingAction(update.Message.Chat.ID) == waitingPersonText {
+			result := c.handlePendingPersonText(ctx, update.Message.Chat.ID, text)
+			c.replyWithRootMenu(ctx, update.Message.Chat.ID, result)
+			logger.Info("telegram pending person text handled", "user_id", userID, "chat_id", update.Message.Chat.ID)
 			return
 		}
 
@@ -211,6 +315,7 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 			return
 		}
 
+		c.clearPendingAction(update.Message.Chat.ID)
 		c.replyWithRootMenu(ctx, update.Message.Chat.ID, "Неизвестная команда. Используйте /start или /ping.")
 		logger.Info("telegram command not found", "command", text, "user_id", userID, "chat_id", update.Message.Chat.ID)
 	})
@@ -295,6 +400,12 @@ func (c *TelegramChannel) runMenuItem(ctx context.Context, chatID int64, item *b
 		return
 	}
 
+	if item != nil && item.ID == "add_person" {
+		c.replyWithRootMenu(ctx, chatID, c.startAddPerson(chatID))
+		return
+	}
+
+	c.clearPendingAction(chatID)
 	result, err := botmenu.Run(ctx, item)
 	if err != nil {
 		c.replyWithRootMenu(ctx, chatID, "Не удалось выполнить действие.")

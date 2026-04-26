@@ -6,8 +6,9 @@ import (
 )
 
 type PromptTemplate struct {
-	Task   Task
-	System string
+	Task           Task
+	System         string
+	ResponseFormat *ResponseFormat
 }
 
 type TemplatePrompter struct {
@@ -21,15 +22,6 @@ func NewTemplatePrompter(templates []PromptTemplate) TemplatePrompter {
 	}
 
 	return TemplatePrompter{templates: byTask}
-}
-
-func DefaultPromptTemplates() []PromptTemplate {
-	return []PromptTemplate{
-		{
-			Task:   TaskGeneralDraft,
-			System: "Ты помогаешь подготовить аккуратный черновик для архивного сервиса. Не выдумывай факты, сохраняй неопределённость и явно отмечай спорные места.",
-		},
-	}
 }
 
 func (p TemplatePrompter) Build(task Task, input string) (Prompt, error) {
@@ -54,5 +46,6 @@ func (p TemplatePrompter) Build(task Task, input string) (Prompt, error) {
 				Content: input,
 			},
 		},
+		ResponseFormat: template.ResponseFormat,
 	}, nil
 }
