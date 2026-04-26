@@ -115,6 +115,25 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 		logger.Info("telegram root menu submenu handled", "item_id", item.ID, "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
 	})
 
+	c.bot.RegisterHandlerMatchFunc(func(update *models.Update) bool {
+		return isPlainTextMessage(update)
+	}, func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		text := strings.TrimSpace(update.Message.Text)
+		var userID int64
+		if update.Message.From != nil {
+			userID = update.Message.From.ID
+		}
+
+		if !c.isAllowedMessage(update) {
+			c.reply(ctx, update.Message.Chat.ID, "Действие недоступно для этого аккаунта.")
+			logger.Warn("telegram message rejected", "text", text, "user_id", userID, "chat_id", update.Message.Chat.ID)
+			return
+		}
+
+		c.replyWithRootMenu(ctx, update.Message.Chat.ID, "Неизвестное действие. Используйте меню ниже.")
+		logger.Info("telegram text not found", "text", text, "user_id", userID, "chat_id", update.Message.Chat.ID)
+	})
+
 	c.bot.RegisterHandler(bot.HandlerTypeCallbackQueryData, botmenu.CallbackPrefix, bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
 		if update.CallbackQuery == nil {
 			return
@@ -153,19 +172,23 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 		logger.Info("telegram callback submenu handled", "callback", update.CallbackQuery.Data, "user_id", update.CallbackQuery.From.ID, "chat_id", chatID)
 	})
 
-	c.bot.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
-		if update.Message == nil || !strings.HasPrefix(strings.TrimSpace(update.Message.Text), "/") {
-			return
+	c.bot.RegisterHandlerMatchFunc(func(update *models.Update) bool {
+		return isCommandMessage(update)
+	}, func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		text := strings.TrimSpace(update.Message.Text)
+		var userID int64
+		if update.Message.From != nil {
+			userID = update.Message.From.ID
 		}
 
 		if !c.isAllowedMessage(update) {
 			c.reply(ctx, update.Message.Chat.ID, "Команда недоступна для этого аккаунта.")
-			logger.Warn("telegram command rejected", "command", update.Message.Text, "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
+			logger.Warn("telegram command rejected", "command", text, "user_id", userID, "chat_id", update.Message.Chat.ID)
 			return
 		}
 
 		c.replyWithRootMenu(ctx, update.Message.Chat.ID, "Неизвестная команда. Используйте /start или /ping.")
-		logger.Info("telegram command not found", "command", update.Message.Text, "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
+		logger.Info("telegram command not found", "command", text, "user_id", userID, "chat_id", update.Message.Chat.ID)
 	})
 
 	go c.bot.Start(ctx)
@@ -186,12 +209,33 @@ func (c *TelegramChannel) isRootMenuMessage(update *models.Update) bool {
 	}
 
 	text := strings.TrimSpace(update.Message.Text)
-	if text == "" || strings.HasPrefix(text, "/") {
+	if !isPlainText(text) {
 		return false
 	}
 
 	_, ok := c.menu.FindRootTitle(text)
 	return ok
+}
+
+func isPlainTextMessage(update *models.Update) bool {
+	if update == nil || update.Message == nil {
+		return false
+	}
+
+	return isPlainText(update.Message.Text)
+}
+
+func isCommandMessage(update *models.Update) bool {
+	if update == nil || update.Message == nil {
+		return false
+	}
+
+	return strings.HasPrefix(strings.TrimSpace(update.Message.Text), "/")
+}
+
+func isPlainText(text string) bool {
+	text = strings.TrimSpace(text)
+	return text != "" && !strings.HasPrefix(text, "/")
 }
 
 func (c *TelegramChannel) isAllowedCallback(update *models.Update) bool {
