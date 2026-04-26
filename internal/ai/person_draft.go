@@ -49,12 +49,59 @@ func ParsePersonDraft(raw string) (PersonDraft, error) {
 		return PersonDraft{}, fmt.Errorf("person draft response is empty")
 	}
 
+	raw, err := extractJSONObject(raw)
+	if err != nil {
+		return PersonDraft{}, err
+	}
+
 	var draft PersonDraft
 	if err := json.Unmarshal([]byte(raw), &draft); err != nil {
 		return PersonDraft{}, fmt.Errorf("decode person draft response: %w", err)
 	}
 
 	return draft, nil
+}
+
+func extractJSONObject(raw string) (string, error) {
+	start := strings.Index(raw, "{")
+	if start < 0 {
+		return "", fmt.Errorf("person draft response does not contain JSON object")
+	}
+
+	inString := false
+	escaped := false
+	depth := 0
+	for i := start; i < len(raw); i++ {
+		ch := raw[i]
+
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' && inString {
+			escaped = true
+			continue
+		}
+		if ch == '"' {
+			inString = !inString
+			continue
+		}
+		if inString {
+			continue
+		}
+
+		switch ch {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return raw[start : i+1], nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("person draft response contains incomplete JSON object")
 }
 
 func FormatPersonDraft(draft PersonDraft, topicTitles map[string]string) string {

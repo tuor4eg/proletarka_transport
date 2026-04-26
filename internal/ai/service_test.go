@@ -166,6 +166,21 @@ func TestParsePersonDraftRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestParsePersonDraftExtractsJSONFromReasoningText(t *testing.T) {
+	draft, err := ParsePersonDraft(`<think>Сначала разберу текст.</think>
+{"person":{"name":"Иван Иванов","shortBio":null,"birthYear":null,"deathYear":null,"yearsLabel":null},"events":[],"warnings":["Неясна дата рождения."]}`)
+	if err != nil {
+		t.Fatalf("ParsePersonDraft() returned error: %v", err)
+	}
+
+	if draft.Person.Name != "Иван Иванов" {
+		t.Fatalf("person name = %q, want Иван Иванов", draft.Person.Name)
+	}
+	if len(draft.Warnings) != 1 {
+		t.Fatalf("warnings len = %d, want 1", len(draft.Warnings))
+	}
+}
+
 func TestFormatPersonDraft(t *testing.T) {
 	shortBio := "Токарь завода"
 	warning := "Неясна дата смерти."
