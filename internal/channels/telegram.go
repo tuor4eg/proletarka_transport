@@ -20,6 +20,7 @@ import (
 
 const importTopicsUnavailableMessage = "Не удалось получить список тем. Попробуйте позже."
 const addPersonPromptMessage = "Пришлите одним сообщением описание человека: имя, годы жизни, биографию, связь с заводом и важные события. Я подготовлю черновик для проверки."
+const personDraftAcceptedMessage = "Текст принят. Готовлю черновик, это может занять немного времени."
 const personDraftUnavailableMessage = "Не удалось подготовить черновик. Попробуйте позже."
 
 type ImportTopicsProvider interface {
@@ -252,6 +253,9 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 		}
 
 		if c.pendingAction(update.Message.Chat.ID) == waitingPersonText {
+			if text != "" {
+				c.reply(ctx, update.Message.Chat.ID, personDraftAcceptedMessage)
+			}
 			result := c.handlePendingPersonText(ctx, update.Message.Chat.ID, text)
 			c.replyWithRootMenu(ctx, update.Message.Chat.ID, result)
 			logger.Info("telegram pending person text handled", "user_id", userID, "chat_id", update.Message.Chat.ID)
