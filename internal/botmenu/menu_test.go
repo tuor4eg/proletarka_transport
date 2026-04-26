@@ -7,12 +7,23 @@ import (
 	"time"
 )
 
-func TestRootContainsPing(t *testing.T) {
+func TestRootContainsActions(t *testing.T) {
 	menu := New()
 
 	root := menu.Root()
 	if root == nil {
 		t.Fatal("root is nil")
+	}
+
+	addPerson, ok := menu.Find("add_person")
+	if !ok {
+		t.Fatal("add_person item not found")
+	}
+	if addPerson.Title != "Добавить человека" {
+		t.Fatalf("add_person title = %q, want %q", addPerson.Title, "Добавить человека")
+	}
+	if !addPerson.IsAction() {
+		t.Fatal("add_person should be an action")
 	}
 
 	ping, ok := menu.Find("ping")
@@ -24,6 +35,25 @@ func TestRootContainsPing(t *testing.T) {
 	}
 	if !ping.IsAction() {
 		t.Fatal("ping should be an action")
+	}
+}
+
+func TestAddPersonReturnsPlaceholder(t *testing.T) {
+	menu := New()
+
+	item, ok := menu.FindCallback(CallbackKey("add_person"))
+	if !ok {
+		t.Fatal("add_person callback not found")
+	}
+
+	got, err := Run(context.Background(), item)
+	if err != nil {
+		t.Fatalf("run add_person: %v", err)
+	}
+	for _, want := range []string{"Добавление человека пока в подготовке.", "описание человека", "черновик", "подтвердить"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("add_person result %q does not contain %q", got, want)
+		}
 	}
 }
 
@@ -51,6 +81,14 @@ func TestFindCallbackAction(t *testing.T) {
 
 func TestFindRootTitle(t *testing.T) {
 	menu := New()
+
+	addPerson, ok := menu.FindRootTitle("Добавить человека")
+	if !ok {
+		t.Fatal("add_person root title not found")
+	}
+	if addPerson.ID != "add_person" {
+		t.Fatalf("root title item = %q, want %q", addPerson.ID, "add_person")
+	}
 
 	item, ok := menu.FindRootTitle("Проверить связь")
 	if !ok {

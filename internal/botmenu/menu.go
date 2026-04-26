@@ -42,6 +42,13 @@ func NewWithStartedAt(startedAt time.Time) *Menu {
 		Title: "Меню",
 		Children: []*Item{
 			{
+				ID:    "add_person",
+				Title: "Добавить человека",
+				Action: func(ctx context.Context) (string, error) {
+					return addPersonPlaceholderMessage(), nil
+				},
+			},
+			{
 				ID:    "ping",
 				Title: "Проверить связь",
 				Action: func(ctx context.Context) (string, error) {
@@ -135,6 +142,10 @@ func statusMessage(uptime time.Duration) string {
 		"Proletarka transport на связи.\n\nСтатус: работает\nАптайм: %s",
 		formatUptime(uptime),
 	)
+}
+
+func addPersonPlaceholderMessage() string {
+	return "Добавление человека пока в подготовке.\n\nСкоро здесь можно будет отправить описание человека одним сообщением, проверить распознанный черновик и подтвердить добавление в архив."
 }
 
 func formatUptime(uptime time.Duration) string {
