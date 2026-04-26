@@ -10,12 +10,14 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"proletarka_transport/internal/botmenu"
 	"proletarka_transport/internal/config"
 )
 
 type TelegramChannel struct {
 	bot     *bot.Bot
 	chatIDs []int64
+	menu    *botmenu.Menu
 }
 
 func NewTelegramChannel(cfg config.TelegramConfig) (*TelegramChannel, error) {
@@ -36,6 +38,7 @@ func NewTelegramChannel(cfg config.TelegramConfig) (*TelegramChannel, error) {
 	return &TelegramChannel{
 		bot:     client,
 		chatIDs: chatIDs,
+		menu:    botmenu.New(),
 	}, nil
 }
 
@@ -69,25 +72,63 @@ func (c *TelegramChannel) Send(ctx context.Context, message Message) error {
 
 func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger) {
 	c.bot.RegisterHandler(bot.HandlerTypeMessageText, "start", bot.MatchTypeCommand, func(ctx context.Context, b *bot.Bot, update *models.Update) {
-		if !c.isAllowed(update) {
+		if !c.isAllowedMessage(update) {
 			c.reply(ctx, update.Message.Chat.ID, "Команда недоступна для этого аккаунта.")
 			logger.Warn("telegram command rejected", "command", "start", "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
 			return
 		}
 
-		c.reply(ctx, update.Message.Chat.ID, "Здравствуйте! Я transport-бот Proletarka.\n\nДоступные команды:\n/start — приветствие\n/ping — проверка, что бот на связи")
+		c.sendMenu(ctx, update.Message.Chat.ID, c.menu.Root())
 		logger.Info("telegram command handled", "command", "start", "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
 	})
 
 	c.bot.RegisterHandler(bot.HandlerTypeMessageText, "ping", bot.MatchTypeCommand, func(ctx context.Context, b *bot.Bot, update *models.Update) {
-		if !c.isAllowed(update) {
+		if !c.isAllowedMessage(update) {
 			c.reply(ctx, update.Message.Chat.ID, "Команда недоступна для этого аккаунта.")
 			logger.Warn("telegram command rejected", "command", "ping", "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
 			return
 		}
 
-		c.reply(ctx, update.Message.Chat.ID, "pong")
+		c.runMenuAction(ctx, update.Message.Chat.ID, "ping")
 		logger.Info("telegram command handled", "command", "ping", "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
+	})
+
+	c.bot.RegisterHandler(bot.HandlerTypeCallbackQueryData, botmenu.CallbackPrefix, bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
+		if update.CallbackQuery == nil {
+			return
+		}
+
+		_, _ = b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+			CallbackQueryID: update.CallbackQuery.ID,
+			ShowAlert:       false,
+		})
+
+		chatID := c.callbackChatID(update)
+		if !c.isAllowedCallback(update) {
+			if chatID != 0 {
+				c.reply(ctx, chatID, "Команда недоступна для этого аккаунта.")
+			}
+			logger.Warn("telegram callback rejected", "callback", update.CallbackQuery.Data, "user_id", update.CallbackQuery.From.ID, "chat_id", chatID)
+			return
+		}
+
+		item, ok := c.menu.FindCallback(update.CallbackQuery.Data)
+		if !ok {
+			if chatID != 0 {
+				c.reply(ctx, chatID, "Неизвестное действие меню.")
+			}
+			logger.Warn("telegram callback not found", "callback", update.CallbackQuery.Data, "user_id", update.CallbackQuery.From.ID, "chat_id", chatID)
+			return
+		}
+
+		if item.IsAction() {
+			c.runMenuItem(ctx, chatID, item)
+			logger.Info("telegram callback action handled", "callback", update.CallbackQuery.Data, "user_id", update.CallbackQuery.From.ID, "chat_id", chatID)
+			return
+		}
+
+		c.showCallbackMenu(ctx, update, item)
+		logger.Info("telegram callback submenu handled", "callback", update.CallbackQuery.Data, "user_id", update.CallbackQuery.From.ID, "chat_id", chatID)
 	})
 
 	c.bot.RegisterHandler(bot.HandlerTypeMessageText, "", bot.MatchTypePrefix, func(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -95,7 +136,7 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 			return
 		}
 
-		if !c.isAllowed(update) {
+		if !c.isAllowedMessage(update) {
 			c.reply(ctx, update.Message.Chat.ID, "Команда недоступна для этого аккаунта.")
 			logger.Warn("telegram command rejected", "command", update.Message.Text, "user_id", update.Message.From.ID, "chat_id", update.Message.Chat.ID)
 			return
@@ -109,12 +150,23 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 	logger.Info("telegram commands started", "allowed_chat_ids", len(c.chatIDs))
 }
 
-func (c *TelegramChannel) isAllowed(update *models.Update) bool {
+func (c *TelegramChannel) isAllowedMessage(update *models.Update) bool {
 	if update == nil || update.Message == nil || update.Message.From == nil {
 		return false
 	}
 
-	userID := update.Message.From.ID
+	return c.isAllowedUser(update.Message.From.ID)
+}
+
+func (c *TelegramChannel) isAllowedCallback(update *models.Update) bool {
+	if update == nil || update.CallbackQuery == nil {
+		return false
+	}
+
+	return c.isAllowedUser(update.CallbackQuery.From.ID)
+}
+
+func (c *TelegramChannel) isAllowedUser(userID int64) bool {
 	for _, chatID := range c.chatIDs {
 		if chatID == userID {
 			return true
@@ -122,6 +174,99 @@ func (c *TelegramChannel) isAllowed(update *models.Update) bool {
 	}
 
 	return false
+}
+
+func (c *TelegramChannel) runMenuAction(ctx context.Context, chatID int64, id string) {
+	item, ok := c.menu.Find(id)
+	if !ok {
+		c.reply(ctx, chatID, "Неизвестное действие меню.")
+		return
+	}
+
+	c.runMenuItem(ctx, chatID, item)
+}
+
+func (c *TelegramChannel) runMenuItem(ctx context.Context, chatID int64, item *botmenu.Item) {
+	if chatID == 0 {
+		return
+	}
+
+	result, err := botmenu.Run(ctx, item)
+	if err != nil {
+		c.reply(ctx, chatID, "Не удалось выполнить действие.")
+		return
+	}
+
+	c.reply(ctx, chatID, result)
+}
+
+func (c *TelegramChannel) sendMenu(ctx context.Context, chatID int64, item *botmenu.Item) {
+	_, _ = c.bot.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        menuText(item),
+		ReplyMarkup: c.inlineKeyboard(item),
+	})
+}
+
+func (c *TelegramChannel) showCallbackMenu(ctx context.Context, update *models.Update, item *botmenu.Item) {
+	if update.CallbackQuery.Message.Message != nil {
+		_, _ = c.bot.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:      update.CallbackQuery.Message.Message.Chat.ID,
+			MessageID:   update.CallbackQuery.Message.Message.ID,
+			Text:        menuText(item),
+			ReplyMarkup: c.inlineKeyboard(item),
+		})
+		return
+	}
+
+	if chatID := c.callbackChatID(update); chatID != 0 {
+		c.sendMenu(ctx, chatID, item)
+	}
+}
+
+func (c *TelegramChannel) callbackChatID(update *models.Update) int64 {
+	if update == nil || update.CallbackQuery == nil {
+		return 0
+	}
+	if update.CallbackQuery.Message.Message != nil {
+		return update.CallbackQuery.Message.Message.Chat.ID
+	}
+
+	return update.CallbackQuery.From.ID
+}
+
+func (c *TelegramChannel) inlineKeyboard(item *botmenu.Item) *models.InlineKeyboardMarkup {
+	if item == nil || len(item.Children) == 0 {
+		return nil
+	}
+
+	keyboard := make([][]models.InlineKeyboardButton, 0, len(item.Children))
+	for _, child := range item.Children {
+		keyboard = append(keyboard, []models.InlineKeyboardButton{
+			{
+				Text:         child.Title,
+				CallbackData: botmenu.CallbackKey(child.ID),
+			},
+		})
+	}
+	if parent, ok := c.menu.Parent(item.ID); ok {
+		keyboard = append(keyboard, []models.InlineKeyboardButton{
+			{
+				Text:         "Назад",
+				CallbackData: botmenu.CallbackKey(parent.ID),
+			},
+		})
+	}
+
+	return &models.InlineKeyboardMarkup{InlineKeyboard: keyboard}
+}
+
+func menuText(item *botmenu.Item) string {
+	if item == nil || item.ID == "root" {
+		return "Здравствуйте! Я transport-бот Proletarka.\n\nВыберите действие:"
+	}
+
+	return item.Title
 }
 
 func (c *TelegramChannel) reply(ctx context.Context, chatID int64, text string) {

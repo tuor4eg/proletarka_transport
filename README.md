@@ -262,7 +262,11 @@ If multiple email recipients are configured, the Email channel is treated as suc
 ## Telegram commands
 
 Current commands:
+- `/start` shows the button menu
 - `/ping` replies with `pong`
+
+Current buttons:
+- `Ping` replies with `pong`
 
 Command rules:
 - commands are available only for Telegram ids listed in `TELEGRAM_CHAT_IDS`
