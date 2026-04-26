@@ -147,8 +147,8 @@ func TestHandlePendingPersonTextGeneratesDraftAndClearsState(t *testing.T) {
 			t.Fatalf("AI input does not contain %q: %q", want, generator.request.Input)
 		}
 	}
-	if channel.pendingAction(123) != "" {
-		t.Fatalf("pending action was not cleared: %q", channel.pendingAction(123))
+	if channel.pendingAction(123) != waitingPersonConfirm {
+		t.Fatalf("pending action = %q, want %q", channel.pendingAction(123), waitingPersonConfirm)
 	}
 }
 
@@ -170,6 +170,49 @@ func TestHandlePendingPersonTextRejectsInvalidAIJSON(t *testing.T) {
 	}
 	if channel.pendingAction(123) != "" {
 		t.Fatalf("pending action was not cleared: %q", channel.pendingAction(123))
+	}
+}
+
+func TestConfirmPersonDraftClearsStateAndReturnsPlaceholder(t *testing.T) {
+	channel := &TelegramChannel{}
+	channel.setPendingAction(123, waitingPersonConfirm)
+
+	got := channel.confirmPersonDraft(123)
+
+	if got != personDraftConfirmPlaceholderMessage {
+		t.Fatalf("confirmPersonDraft() = %q, want %q", got, personDraftConfirmPlaceholderMessage)
+	}
+	if channel.pendingAction(123) != "" {
+		t.Fatalf("pending action was not cleared: %q", channel.pendingAction(123))
+	}
+}
+
+func TestCancelPersonDraftClearsState(t *testing.T) {
+	channel := &TelegramChannel{}
+	channel.setPendingAction(123, waitingPersonConfirm)
+
+	got := channel.cancelPersonDraft(123)
+
+	if got != personDraftCancelMessage {
+		t.Fatalf("cancelPersonDraft() = %q, want %q", got, personDraftCancelMessage)
+	}
+	if channel.pendingAction(123) != "" {
+		t.Fatalf("pending action was not cleared: %q", channel.pendingAction(123))
+	}
+}
+
+func TestPersonDraftActionsKeyboard(t *testing.T) {
+	channel := &TelegramChannel{}
+
+	keyboard := channel.personDraftActionsKeyboard()
+	if keyboard == nil || len(keyboard.InlineKeyboard) != 1 || len(keyboard.InlineKeyboard[0]) != 2 {
+		t.Fatalf("unexpected keyboard: %#v", keyboard)
+	}
+	if keyboard.InlineKeyboard[0][0].CallbackData != personDraftConfirmCallback {
+		t.Fatalf("confirm callback = %q, want %q", keyboard.InlineKeyboard[0][0].CallbackData, personDraftConfirmCallback)
+	}
+	if keyboard.InlineKeyboard[0][1].CallbackData != personDraftCancelCallback {
+		t.Fatalf("cancel callback = %q, want %q", keyboard.InlineKeyboard[0][1].CallbackData, personDraftCancelCallback)
 	}
 }
 
