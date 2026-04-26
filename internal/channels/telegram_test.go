@@ -150,6 +150,53 @@ func TestHandlePendingPersonTextGeneratesDraftAndClearsState(t *testing.T) {
 	if channel.pendingAction(123) != waitingPersonConfirm {
 		t.Fatalf("pending action = %q, want %q", channel.pendingAction(123), waitingPersonConfirm)
 	}
+	if generator.calls != 1 {
+		t.Fatalf("generator calls = %d, want 1", generator.calls)
+	}
+}
+
+func TestHandlePendingPersonTextSetsAnalysisStateDuringGeneration(t *testing.T) {
+	channel := &TelegramChannel{
+		importTopicsProvider: fakeImportTopicsProvider{
+			topics: []backend.ImportTopic{{Code: "war", Title: "Война"}},
+		},
+	}
+	channel.personDraftGenerator = &fakePersonDraftGenerator{
+		response: ai.Response{Text: `{"person":{"name":"Иван Иванов","shortBio":null,"birthYear":null,"deathYear":null,"yearsLabel":null},"events":[],"warnings":[]}`},
+		onGenerate: func() {
+			if channel.pendingAction(123) != waitingPersonAnalysis {
+				t.Fatalf("pending action during generation = %q, want %q", channel.pendingAction(123), waitingPersonAnalysis)
+			}
+		},
+	}
+	channel.setPendingAction(123, waitingPersonText)
+
+	_ = channel.handlePendingPersonText(context.Background(), 123, "Иван Иванов", nil)
+}
+
+func TestHandlePendingPersonTextDoesNotStartSecondAnalysis(t *testing.T) {
+	generator := &fakePersonDraftGenerator{
+		response: ai.Response{Text: `{"person":{"name":"Иван Иванов","shortBio":null,"birthYear":null,"deathYear":null,"yearsLabel":null},"events":[],"warnings":[]}`},
+	}
+	channel := &TelegramChannel{
+		importTopicsProvider: fakeImportTopicsProvider{
+			topics: []backend.ImportTopic{{Code: "war", Title: "Война"}},
+		},
+		personDraftGenerator: generator,
+	}
+	channel.setPendingAction(123, waitingPersonAnalysis)
+
+	got := channel.handlePendingPersonText(context.Background(), 123, "ещё текст", nil)
+
+	if got != personDraftInProgressMessage {
+		t.Fatalf("result = %q, want %q", got, personDraftInProgressMessage)
+	}
+	if generator.calls != 0 {
+		t.Fatalf("generator calls = %d, want 0", generator.calls)
+	}
+	if channel.pendingAction(123) != waitingPersonAnalysis {
+		t.Fatalf("pending action = %q, want %q", channel.pendingAction(123), waitingPersonAnalysis)
+	}
 }
 
 func TestHandlePendingPersonTextRejectsInvalidAIJSON(t *testing.T) {
@@ -266,12 +313,18 @@ func (p fakeImportTopicsProvider) FetchImportTopics(ctx context.Context) ([]back
 }
 
 type fakePersonDraftGenerator struct {
-	request  ai.Request
-	response ai.Response
-	err      error
+	request    ai.Request
+	response   ai.Response
+	err        error
+	calls      int
+	onGenerate func()
 }
 
 func (g *fakePersonDraftGenerator) Generate(ctx context.Context, req ai.Request) (ai.Response, error) {
 	g.request = req
+	g.calls++
+	if g.onGenerate != nil {
+		g.onGenerate()
+	}
 	return g.response, g.err
 }

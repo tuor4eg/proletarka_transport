@@ -21,6 +21,7 @@ import (
 const importTopicsUnavailableMessage = "Не удалось получить список тем. Попробуйте позже."
 const addPersonPromptMessage = "Пришлите одним сообщением описание человека: имя, годы жизни, биографию, связь с заводом и важные события. Я подготовлю черновик для проверки."
 const personDraftAcceptedMessage = "Текст принят. Готовлю черновик, это может занять немного времени."
+const personDraftInProgressMessage = "Текст уже отправлен на анализ. Дождитесь результата, пожалуйста."
 const personDraftUnavailableMessage = "Не удалось подготовить черновик. Попробуйте позже."
 const personDraftCallbackPrefix = "person_draft:"
 const personDraftConfirmCallback = "person_draft:confirm"
@@ -39,8 +40,9 @@ type PersonDraftGenerator interface {
 type pendingAction string
 
 const (
-	waitingPersonText    pendingAction = "waiting_person_text"
-	waitingPersonConfirm pendingAction = "waiting_person_confirm"
+	waitingPersonText     pendingAction = "waiting_person_text"
+	waitingPersonAnalysis pendingAction = "waiting_person_analysis"
+	waitingPersonConfirm  pendingAction = "waiting_person_confirm"
 )
 
 type TelegramChannel struct {
@@ -102,6 +104,10 @@ func (c *TelegramChannel) handlePendingPersonText(ctx context.Context, chatID in
 	source = strings.TrimSpace(source)
 	if source == "" {
 		return addPersonPromptMessage
+	}
+
+	if !c.transitionPendingAction(chatID, waitingPersonText, waitingPersonAnalysis) {
+		return personDraftInProgressMessage
 	}
 
 	if c.importTopicsProvider == nil {
@@ -211,6 +217,21 @@ func (c *TelegramChannel) pendingAction(chatID int64) pendingAction {
 	return c.pending[chatID]
 }
 
+func (c *TelegramChannel) transitionPendingAction(chatID int64, from pendingAction, to pendingAction) bool {
+	if c == nil || chatID == 0 {
+		return false
+	}
+
+	c.pendingMu.Lock()
+	defer c.pendingMu.Unlock()
+
+	if c.pending[chatID] != from {
+		return false
+	}
+	c.pending[chatID] = to
+	return true
+}
+
 func (c *TelegramChannel) clearPendingAction(chatID int64) {
 	if c == nil || chatID == 0 {
 		return
@@ -312,7 +333,8 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 			return
 		}
 
-		if c.pendingAction(update.Message.Chat.ID) == waitingPersonText {
+		switch c.pendingAction(update.Message.Chat.ID) {
+		case waitingPersonText:
 			if text != "" {
 				c.reply(ctx, update.Message.Chat.ID, personDraftAcceptedMessage)
 			}
@@ -323,6 +345,10 @@ func (c *TelegramChannel) StartCommands(ctx context.Context, logger *slog.Logger
 				c.replyWithRootMenu(ctx, update.Message.Chat.ID, result)
 			}
 			logger.Info("telegram pending person text handled", "user_id", userID, "chat_id", update.Message.Chat.ID)
+			return
+		case waitingPersonAnalysis:
+			c.reply(ctx, update.Message.Chat.ID, personDraftInProgressMessage)
+			logger.Info("telegram pending person analysis ignored text", "user_id", userID, "chat_id", update.Message.Chat.ID)
 			return
 		}
 
