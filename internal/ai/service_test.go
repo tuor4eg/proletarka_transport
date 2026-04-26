@@ -159,6 +159,52 @@ func TestBuildPersonDraftInput(t *testing.T) {
 	}
 }
 
+func TestParsePersonDraftRejectsInvalidJSON(t *testing.T) {
+	_, err := ParsePersonDraft("не json")
+	if err == nil {
+		t.Fatal("expected invalid JSON error")
+	}
+}
+
+func TestFormatPersonDraft(t *testing.T) {
+	shortBio := "Токарь завода"
+	warning := "Неясна дата смерти."
+	birthYear := 1900
+	workYear := 1942
+
+	got := FormatPersonDraft(PersonDraft{
+		Person: DraftPerson{
+			Name:      "Иван Иванов",
+			ShortBio:  &shortBio,
+			BirthYear: &birthYear,
+		},
+		Events: []DraftEvent{
+			{
+				Text:       "Работал на заводе",
+				YearFrom:   &workYear,
+				TopicCodes: []string{"war", "factory"},
+			},
+		},
+		Warnings: []string{warning},
+	}, map[string]string{
+		"war":     "Война",
+		"factory": "Завод",
+	})
+
+	for _, want := range []string{
+		"Черновик для проверки",
+		"Человек: Иван Иванов",
+		"Годы жизни: 1900-",
+		"Краткое описание:\nТокарь завода",
+		"- 1942: Работал на заводе [темы: Война, Завод]",
+		"Предупреждения:\n- Неясна дата смерти.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("formatted draft %q does not contain %q", got, want)
+		}
+	}
+}
+
 type fakeTransport struct {
 	model    ModelConfig
 	prompt   Prompt

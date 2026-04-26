@@ -123,7 +123,32 @@ func (c *TelegramChannel) handlePendingPersonText(ctx context.Context, chatID in
 		return personDraftUnavailableMessage
 	}
 
-	return "Черновик от нейронки:\n\n" + strings.TrimSpace(response.Text)
+	draft, err := ai.ParsePersonDraft(response.Text)
+	if err != nil {
+		return personDraftUnavailableMessage
+	}
+
+	return ai.FormatPersonDraft(draft, importTopicTitles(topics))
+}
+
+func importTopicTitles(topics []backend.ImportTopic) map[string]string {
+	titles := make(map[string]string)
+	var walk func(items []backend.ImportTopic)
+	walk = func(items []backend.ImportTopic) {
+		for _, topic := range items {
+			code := strings.TrimSpace(topic.Code)
+			title := strings.TrimSpace(topic.Title)
+			if code != "" && title != "" {
+				titles[code] = title
+			}
+			if len(topic.Children) > 0 {
+				walk(topic.Children)
+			}
+		}
+	}
+	walk(topics)
+
+	return titles
 }
 
 func (c *TelegramChannel) setPendingAction(chatID int64, action pendingAction) {

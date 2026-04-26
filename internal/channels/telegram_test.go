@@ -114,7 +114,7 @@ func TestStartAddPersonSetsPendingState(t *testing.T) {
 
 func TestHandlePendingPersonTextGeneratesDraftAndClearsState(t *testing.T) {
 	generator := &fakePersonDraftGenerator{
-		response: ai.Response{Text: `{"person":{"name":"Иван Иванов"}}`},
+		response: ai.Response{Text: `{"person":{"name":"Иван Иванов","shortBio":"Токарь завода","birthYear":1900,"deathYear":null,"yearsLabel":null},"events":[{"text":"Работал на заводе","yearFrom":1942,"yearTo":null,"yearsLabel":null,"topicCodes":["war"]}],"warnings":[]}`},
 	}
 	channel := &TelegramChannel{
 		importTopicsProvider: fakeImportTopicsProvider{
@@ -128,11 +128,13 @@ func TestHandlePendingPersonTextGeneratesDraftAndClearsState(t *testing.T) {
 
 	got := channel.handlePendingPersonText(context.Background(), 123, " Иван Иванов, в 1942 работал на заводе. ")
 
-	if !strings.Contains(got, "Черновик от нейронки:\n\n") {
-		t.Fatalf("result = %q, want AI draft prefix", got)
+	if !strings.Contains(got, "Черновик для проверки") {
+		t.Fatalf("result = %q, want draft title", got)
 	}
-	if !strings.Contains(got, `"name":"Иван Иванов"`) {
-		t.Fatalf("result = %q, want AI response", got)
+	for _, want := range []string{"Человек: Иван Иванов", "Годы жизни: 1900-", "Краткое описание:", "Токарь завода", "- 1942: Работал на заводе [темы: Война]"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("result = %q, want %q", got, want)
+		}
 	}
 	if generator.request.Task != ai.TaskPersonDraft {
 		t.Fatalf("task = %q, want %q", generator.request.Task, ai.TaskPersonDraft)
@@ -144,6 +146,27 @@ func TestHandlePendingPersonTextGeneratesDraftAndClearsState(t *testing.T) {
 		if !strings.Contains(generator.request.Input, want) {
 			t.Fatalf("AI input does not contain %q: %q", want, generator.request.Input)
 		}
+	}
+	if channel.pendingAction(123) != "" {
+		t.Fatalf("pending action was not cleared: %q", channel.pendingAction(123))
+	}
+}
+
+func TestHandlePendingPersonTextRejectsInvalidAIJSON(t *testing.T) {
+	channel := &TelegramChannel{
+		importTopicsProvider: fakeImportTopicsProvider{
+			topics: []backend.ImportTopic{{Code: "war", Title: "Война"}},
+		},
+		personDraftGenerator: &fakePersonDraftGenerator{
+			response: ai.Response{Text: "думаю, это Иван"},
+		},
+	}
+	channel.setPendingAction(123, waitingPersonText)
+
+	got := channel.handlePendingPersonText(context.Background(), 123, "Иван Иванов")
+
+	if got != personDraftUnavailableMessage {
+		t.Fatalf("result = %q, want %q", got, personDraftUnavailableMessage)
 	}
 	if channel.pendingAction(123) != "" {
 		t.Fatalf("pending action was not cleared: %q", channel.pendingAction(123))
