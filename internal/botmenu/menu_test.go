@@ -2,7 +2,9 @@ package botmenu
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestRootContainsPing(t *testing.T) {
@@ -17,8 +19,8 @@ func TestRootContainsPing(t *testing.T) {
 	if !ok {
 		t.Fatal("ping item not found")
 	}
-	if ping.Title != "Ping" {
-		t.Fatalf("ping title = %q, want %q", ping.Title, "Ping")
+	if ping.Title != "Проверить связь" {
+		t.Fatalf("ping title = %q, want %q", ping.Title, "Проверить связь")
 	}
 	if !ping.IsAction() {
 		t.Fatal("ping should be an action")
@@ -26,7 +28,7 @@ func TestRootContainsPing(t *testing.T) {
 }
 
 func TestFindCallbackAction(t *testing.T) {
-	menu := New()
+	menu := NewWithStartedAt(time.Now().Add(-2*time.Hour - 3*time.Minute - 4*time.Second))
 
 	item, ok := menu.FindCallback(CallbackKey("ping"))
 	if !ok {
@@ -37,8 +39,25 @@ func TestFindCallbackAction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run ping: %v", err)
 	}
-	if got != "pong" {
-		t.Fatalf("ping result = %q, want %q", got, "pong")
+	for _, want := range []string{"Proletarka transport на связи.", "Статус: работает", "Аптайм:"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("ping result %q does not contain %q", got, want)
+		}
+	}
+	if !strings.Contains(got, "2 ч") {
+		t.Fatalf("ping result %q does not contain expected uptime hours", got)
+	}
+}
+
+func TestFindRootTitle(t *testing.T) {
+	menu := New()
+
+	item, ok := menu.FindRootTitle("Проверить связь")
+	if !ok {
+		t.Fatal("ping root title not found")
+	}
+	if item.ID != "ping" {
+		t.Fatalf("root title item = %q, want %q", item.ID, "ping")
 	}
 }
 

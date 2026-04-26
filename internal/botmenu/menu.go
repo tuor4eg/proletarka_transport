@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 )
 
 const CallbackPrefix = "menu:"
@@ -22,29 +23,39 @@ func (i *Item) IsAction() bool {
 }
 
 type Menu struct {
-	root *Item
+	root      *Item
+	startedAt time.Time
 }
 
 func New() *Menu {
-	return &Menu{
-		root: &Item{
-			ID:    "root",
-			Title: "Меню",
-			Children: []*Item{
-				{
-					ID:    "ping",
-					Title: "Ping",
-					Action: func(ctx context.Context) (string, error) {
-						return "pong", nil
-					},
+	return NewWithStartedAt(time.Now())
+}
+
+func NewWithStartedAt(startedAt time.Time) *Menu {
+	if startedAt.IsZero() {
+		startedAt = time.Now()
+	}
+
+	menu := &Menu{startedAt: startedAt}
+	menu.root = &Item{
+		ID:    "root",
+		Title: "Меню",
+		Children: []*Item{
+			{
+				ID:    "ping",
+				Title: "Проверить связь",
+				Action: func(ctx context.Context) (string, error) {
+					return statusMessage(time.Since(menu.startedAt)), nil
 				},
 			},
 		},
 	}
+
+	return menu
 }
 
 func NewWithRoot(root *Item) *Menu {
-	return &Menu{root: root}
+	return &Menu{root: root, startedAt: time.Now()}
 }
 
 func (m *Menu) Root() *Item {
@@ -80,6 +91,20 @@ func (m *Menu) FindCallback(data string) (*Item, bool) {
 	return m.Find(id)
 }
 
+func (m *Menu) FindRootTitle(title string) (*Item, bool) {
+	if m == nil || m.root == nil || title == "" {
+		return nil, false
+	}
+
+	for _, child := range m.root.Children {
+		if child.Title == title {
+			return child, true
+		}
+	}
+
+	return nil, false
+}
+
 func CallbackKey(id string) string {
 	return CallbackPrefix + id
 }
@@ -103,6 +128,44 @@ func Run(ctx context.Context, item *Item) (string, error) {
 	}
 
 	return item.Action(ctx)
+}
+
+func statusMessage(uptime time.Duration) string {
+	return fmt.Sprintf(
+		"Proletarka transport на связи.\n\nСтатус: работает\nАптайм: %s",
+		formatUptime(uptime),
+	)
+}
+
+func formatUptime(uptime time.Duration) string {
+	if uptime < 0 {
+		uptime = 0
+	}
+
+	uptime = uptime.Round(time.Second)
+	days := int(uptime / (24 * time.Hour))
+	uptime -= time.Duration(days) * 24 * time.Hour
+	hours := int(uptime / time.Hour)
+	uptime -= time.Duration(hours) * time.Hour
+	minutes := int(uptime / time.Minute)
+	uptime -= time.Duration(minutes) * time.Minute
+	seconds := int(uptime / time.Second)
+
+	parts := make([]string, 0, 4)
+	if days > 0 {
+		parts = append(parts, fmt.Sprintf("%d д", days))
+	}
+	if hours > 0 {
+		parts = append(parts, fmt.Sprintf("%d ч", hours))
+	}
+	if minutes > 0 {
+		parts = append(parts, fmt.Sprintf("%d мин", minutes))
+	}
+	if seconds > 0 || len(parts) == 0 {
+		parts = append(parts, fmt.Sprintf("%d сек", seconds))
+	}
+
+	return strings.Join(parts, " ")
 }
 
 func find(item *Item, id string) (*Item, bool) {
